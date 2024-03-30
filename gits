@@ -1,0 +1,100 @@
+#!/bin/sh
+
+# Dependencies:
+# - git
+
+is_leap_year()
+{
+    if [ $(($1 % 4)) -eq 0 ] && [ $(($1 % 100)) -ne 0 ] || [ $(($1 % 400)) -eq 0 ]
+    then return $?
+    else return $?
+    fi
+}
+
+nb_days_in_feb()
+{
+    if is_leap_year "$1"
+    then echo 29
+    else echo 28
+    fi
+}
+
+this_year=$(date +%Y)
+root=.
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --year)
+        shift
+        this_year=$1
+        shift
+        ;;
+    --*)
+        shift
+        ;;
+    *)
+        root=$1
+        shift
+        break
+        ;;
+    esac
+done
+
+dirs=$(
+    find "$root" -type d -name .git -prune -print0 | xargs -0r dirname
+)
+
+format='
+    $1 ~ /^$/ { dir = $2; }
+    $2 ~ /(aeiiver|one)$/ { printf("%s\n", $1); }
+'
+
+commit_count_map=$(
+    for dir in $dirs; do
+        printf '\1%s\n' "$dir"
+        (
+            cd "$dir" || exit
+            git log --format='%as%x01%aN' 2>/dev/null
+        )
+    done | awk -F '\1' "$format" | sort | uniq -c
+)
+
+month1=$(seq 31)
+month2=$(seq "$(nb_days_in_feb "$this_year")")
+month3=$(seq 31)
+month4=$(seq 30)
+month5=$(seq 31)
+month6=$(seq 30)
+month7=$(seq 31)
+month8=$(seq 31)
+month9=$(seq 30)
+month10=$(seq 31)
+month11=$(seq 30)
+month12=$(seq 31)
+
+extract_count='
+    { print $1; }
+    END { if (NR == 0) print 0; }
+'
+
+# We pad commit counts as 2-digit numbers.
+# Surely you won't make more than 99 commits a day, right? :Clueless:
+
+for m in $(seq 12); do
+    eval days="\$month$m"
+    for d in $days; do
+        day=$(printf '%d-%02d-%02d\n' "$this_year" "$m" "$d")
+        commit_count=$(
+            echo "$commit_count_map" | grep "$day" | awk "$extract_count"
+        )
+        case "$commit_count" in
+        0) printf '\e[90m %2d \e[0m' "$commit_count" ;;
+        1) printf '\e[1;97;46m %2d \e[0m' "$commit_count" ;;
+        2) printf '\e[1;97;42m %2d \e[0m' "$commit_count" ;;
+        3) printf '\e[1;97;43m %2d \e[0m' "$commit_count" ;;
+        4) printf '\e[1;97;41m %2d \e[0m' "$commit_count" ;;
+        *) printf '\e[1;97;45m %2d \e[0m' "$commit_count" ;;
+        esac
+    done
+    echo
+done
